@@ -324,14 +324,16 @@ export default function App() {
         });
       }
 
-      // Build query targeting hospitals and clinics
+      // Build query targeting hospitals, clinics, and doctors
       let query = `[out:json];(`;
       if (specificSpecialty) {
-        query += `node["healthcare:specialty"~"${specificSpecialty}"](around:10000,${lat},${lng});`;
-        query += `way["healthcare:specialty"~"${specificSpecialty}"](around:10000,${lat},${lng});`;
+        query += `node["healthcare:specialty"~"${specificSpecialty}",i](around:25000,${lat},${lng});`;
+        query += `way["healthcare:specialty"~"${specificSpecialty}",i](around:25000,${lat},${lng});`;
       }
-      query += `node["amenity"~"hospital|clinic"](around:10000,${lat},${lng});`;
-      query += `way["amenity"~"hospital|clinic"](around:10000,${lat},${lng});`;
+      query += `node["amenity"~"hospital|clinic|doctors",i](around:25000,${lat},${lng});`;
+      query += `way["amenity"~"hospital|clinic|doctors",i](around:25000,${lat},${lng});`;
+      query += `node["healthcare"~"hospital|clinic|doctor",i](around:25000,${lat},${lng});`;
+      query += `way["healthcare"~"hospital|clinic|doctor",i](around:25000,${lat},${lng});`;
       query += `);out center;`;
 
       const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
@@ -1663,7 +1665,7 @@ export default function App() {
                               </div>
                             ) : (
                               <div className="bg-white border border-slate-100 rounded-3xl p-10 text-center">
-                                <p className="text-slate-400 font-bold uppercase tracking-widest text-[11px]">No facilities detected in 10km radius</p>
+                                <p className="text-slate-400 font-bold uppercase tracking-widest text-[11px]">No facilities detected in 25km radius</p>
                                 <button 
                                   onClick={() => fetchClinics(userLocation.lat, userLocation.lng)}
                                   className="mt-6 text-medical font-black text-xs uppercase tracking-widest hover:underline"
