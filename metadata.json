@@ -1,0 +1,9 @@
+{
+  "name": "SymptomSnapFinal",
+  "description": "AI-powered quick health triage tool for rapid symptom analysis.",
+  "requestFramePermissions": [
+    "microphone",
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}

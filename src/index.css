@@ -1,0 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+@theme {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Manrope", serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --color-primary: #0f172a; /* Slate 900 */
+  --color-accent: #0ea5e9; /* Sky 500 */
+  --color-medical: #0d9488; /* Teal 600 */
+  
+  --color-brand-teal: #0D9488;
+  --color-brand-green: #059669;
+  --color-brand-orange: #d97706;
+  --color-brand-red: #dc2626;
+
+  /* Custom shadows */
+  --shadow-brand: 0 4px 14px 0 rgba(13, 148, 136, 0.1);
+  --shadow-card: 0 10px 25px -5px rgba(0, 0, 0, 0.04), 0 8px 10px -6px rgba(0, 0, 0, 0.02);
+}
+
+@layer base {
+  body {
+    @apply font-sans bg-[#F9FBFC] text-slate-900 antialiased selection:bg-medical/10;
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-gray-200 rounded-full hover:bg-gray-300 transition-colors;
+}
+
+@utility perspective-1000 {
+  perspective: 1000px;
+}
+
+@utility preserve-3d {
+  transform-style: preserve-3d;
+}
+
+@utility backface-hidden {
+  backface-visibility: hidden;
+}
+
+@utility rotate-y-180 {
+  transform: rotateY(180deg);
+}
