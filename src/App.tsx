@@ -276,6 +276,14 @@ export default function App() {
   const fetchClinics = async (lat: number, lng: number) => {
     setIsLoadingClinics(true);
     try {
+      const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
+      if (!apiKey) {
+        console.error("Google Maps API key is missing");
+        setError("Google Maps API key is missing. Please add VITE_GOOGLE_MAPS_KEY to your .env file.");
+        setIsLoadingClinics(false);
+        return;
+      }
+
       // Determine specialty keywords based on symptoms
       let specificSpecialty = '';
       const lowerSymptoms = symptoms.toLowerCase();
@@ -300,84 +308,39 @@ export default function App() {
         specificSpecialty = 'ent';
       }
 
-      // Negative keywords to filter out conflicting specialties
-      const filterGroups: {[key: string]: string[]} = {
-        'gastroenterology': ['eye', 'vision', 'dental', 'dentist', 'skin', 'dermatology', 'ortho', 'bone', 'joint', 'ear', 'nose', 'throat', 'optical'],
-        'ophthalmology': ['dental', 'stomach', 'skin', 'ortho', 'bone', 'cardiac', 'heart', 'chest', 'gast'],
-        'dentist': ['eye', 'vision', 'stomach', 'skin', 'ortho', 'cardiac', 'heart', 'chest', 'gast'],
-        'dermatology': ['eye', 'vision', 'dental', 'stomach', 'cardiac', 'ortho', 'heart', 'gast'],
-        'cardiology': ['dental', 'eye', 'vision', 'skin', 'ortho', 'bone', 'stomach', 'gast', 'optical', 'dentist'],
-        'neurology': ['eye', 'vision', 'dental', 'dentist', 'skin', 'dermatology', 'stomach', 'gast', 'ent', 'ear', 'nose', 'throat', 'ortho', 'optical', 'ophthalmology'],
-        'ent': ['eye', 'vision', 'dental', 'dentist', 'skin', 'dermatology', 'stomach', 'gast', 'ortho', 'bone', 'cardiac'],
-        'orthopedics': ['eye', 'vision', 'dental', 'dentist', 'skin', 'dermatology', 'stomach', 'gast', 'cardiac', 'heart', 'chest']
-      };
-
-      const negativeKeywords = specificSpecialty ? (filterGroups[specificSpecialty] || []) : ['eye', 'vision', 'optical', 'dental', 'dentist'];
-
-      // Add default negative groups if specialty detected
+      // Build Google Places nearbySearch query targeting hospitals within 5km
+      let url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=5000&type=hospital&key=${apiKey}`;
       if (specificSpecialty) {
-        Object.keys(filterGroups).forEach(key => {
-          if (key !== specificSpecialty) {
-            negativeKeywords.push(key);
-            filterGroups[key].forEach(kw => negativeKeywords.push(kw));
-          }
-        });
+        url += `&keyword=${specificSpecialty}`;
       }
 
-      // Build query targeting hospitals, clinics, and doctors
-      let query = `[out:json];(`;
-      if (specificSpecialty) {
-        query += `node["healthcare:specialty"~"${specificSpecialty}",i](around:25000,${lat},${lng});`;
-        query += `way["healthcare:specialty"~"${specificSpecialty}",i](around:25000,${lat},${lng});`;
-      }
-      query += `node["amenity"~"hospital|clinic|doctors",i](around:25000,${lat},${lng});`;
-      query += `way["amenity"~"hospital|clinic|doctors",i](around:25000,${lat},${lng});`;
-      query += `node["healthcare"~"hospital|clinic|doctor",i](around:25000,${lat},${lng});`;
-      query += `way["healthcare"~"hospital|clinic|doctor",i](around:25000,${lat},${lng});`;
-      query += `);out center;`;
-
-      const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+      // Using a CORS proxy since Google Places API doesn't support direct client-side requests
+      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+      const response = await fetch(proxyUrl);
       const data = await response.json();
       
-      const clinics = data.elements.map((el: any) => {
-        const hSpecialty = el.tags["healthcare:specialty"] || el.tags.speciality || el.tags["medical:specialty"] || "";
-        const name = el.tags.name || (el.tags.amenity === 'hospital' ? 'Hospital' : 'Clinic');
-        return {
-          id: el.id,
-          name: name,
-          lat: el.lat || el.center?.lat,
-          lng: el.lon || el.center?.lon,
-          addr: el.tags["addr:street"] || el.tags["addr:full"] || 'Near your location',
-          type: el.tags.amenity?.charAt(0).toUpperCase() + el.tags.amenity?.slice(1) || 'Medical Facility',
-          specialty: hSpecialty.toLowerCase(),
-          phone: el.tags.phone || el.tags["contact:phone"] || null,
-          openingHours: el.tags.opening_hours || null
-        };
-      }).filter((c: any) => {
-        if (!c.lat || !c.lng) return false;
-        const lowName = c.name.toLowerCase();
+      if (data.results) {
+        const clinics = data.results.map((place: any) => {
+          return {
+            id: place.place_id,
+            name: place.name,
+            lat: place.geometry?.location?.lat,
+            lng: place.geometry?.location?.lng,
+            addr: place.vicinity || 'Near your location',
+            type: specificSpecialty ? `${specificSpecialty.charAt(0).toUpperCase() + specificSpecialty.slice(1)} Clinic` : 'Hospital/Clinic',
+            specialty: specificSpecialty || 'General',
+            phone: null,
+            openingHours: place.opening_hours?.open_now ? 'Open Now' : null
+          };
+        });
 
-        // 1. Aggressive filtering for eye/vision/dental if not the target
-        if (negativeKeywords.some(key => lowName.includes(key))) {
-          // If it explicitly has "Eye" or "Vision" in name and we aren't looking for vision, exclude
-          return false;
-        }
+        const sortedClinics = clinics.map((c: any) => {
+          const distance = calculateDistance(lat, lng, c.lat, c.lng);
+          return { ...c, distanceVal: distance };
+        }).sort((a: any, b: any) => a.distanceVal - b.distanceVal).slice(0, 5);
 
-        // 2. Specialty check
-        if (specificSpecialty && c.specialty && !c.specialty.includes(specificSpecialty)) {
-          // If tagged with a different specialty, exclude non-hospitals
-          if (c.type.toLowerCase() !== 'hospital') return false;
-        }
-
-        return true;
-      });
-
-      const sortedClinics = clinics.map((c: any) => {
-        const distance = calculateDistance(lat, lng, c.lat, c.lng);
-        return { ...c, distanceVal: distance };
-      }).sort((a: any, b: any) => a.distanceVal - b.distanceVal).slice(0, 5);
-
-      setNearbyClinics(sortedClinics);
+        setNearbyClinics(sortedClinics);
+      }
     } catch (err) {
       console.error("Failed to fetch clinics:", err);
     } finally {
