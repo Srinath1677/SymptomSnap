@@ -308,29 +308,44 @@ export default function App() {
         specificSpecialty = 'ent';
       }
 
-      // Build Google Places nearbySearch query targeting hospitals within 5km
-      let url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=5000&type=hospital&key=${apiKey}`;
-      if (specificSpecialty) {
-        url += `&keyword=${specificSpecialty}`;
-      }
+      // Use Places API (New) Text Search which supports CORS natively and is enabled
+      const queryText = specificSpecialty ? `${specificSpecialty} hospital clinic` : `hospital medical clinic`;
+      
+      const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'places.id,places.displayName,places.location,places.formattedAddress,places.nationalPhoneNumber,places.regularOpeningHours'
+        },
+        body: JSON.stringify({
+          textQuery: queryText,
+          locationBias: {
+            circle: {
+              center: {
+                latitude: lat,
+                longitude: lng
+              },
+              radius: 5000.0
+            }
+          }
+        })
+      });
 
-      // Using a CORS proxy since Google Places API doesn't support direct client-side requests
-      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-      const response = await fetch(proxyUrl);
       const data = await response.json();
       
-      if (data.results) {
-        const clinics = data.results.map((place: any) => {
+      if (data.places) {
+        const clinics = data.places.map((place: any) => {
           return {
-            id: place.place_id,
-            name: place.name,
-            lat: place.geometry?.location?.lat,
-            lng: place.geometry?.location?.lng,
-            addr: place.vicinity || 'Near your location',
+            id: place.id,
+            name: place.displayName?.text || 'Clinic',
+            lat: place.location?.latitude,
+            lng: place.location?.longitude,
+            addr: place.formattedAddress || 'Near your location',
             type: specificSpecialty ? `${specificSpecialty.charAt(0).toUpperCase() + specificSpecialty.slice(1)} Clinic` : 'Hospital/Clinic',
             specialty: specificSpecialty || 'General',
-            phone: null,
-            openingHours: place.opening_hours?.open_now ? 'Open Now' : null
+            phone: place.nationalPhoneNumber || null,
+            openingHours: place.regularOpeningHours?.openNow ? 'Open Now' : null
           };
         });
 
@@ -340,6 +355,9 @@ export default function App() {
         }).sort((a: any, b: any) => a.distanceVal - b.distanceVal).slice(0, 5);
 
         setNearbyClinics(sortedClinics);
+      } else {
+        console.error("Places API Error or no places:", data);
+        setNearbyClinics([]);
       }
     } catch (err) {
       console.error("Failed to fetch clinics:", err);
